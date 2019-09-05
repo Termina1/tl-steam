@@ -68,17 +68,14 @@ pub enum TLTokenEnum {
   #[token = "!"]
   EXCLMARK,
 
-  #[token = "Final"]
-  FINAL,
-
-  #[token = "New"]
-  NEW,
-
-  #[token = "Empty"]
-  EMPTY,
-
   #[end]
   END,
+
+  #[token = "types"]
+  TYPES,
+
+  #[token = "functions"]
+  FUNCTIONS,
 
   #[regex = "//.*"]
   COMMENT,
@@ -86,7 +83,7 @@ pub enum TLTokenEnum {
   #[regex = "[0-9]+"]
   NUMBER,
 
-  #[regex = "[0-9a-fA-F]+"]
+  #[regex = "#[0-9a-fA-F]+"]
   HEXNUMBER,
 
   #[regex = "[a-z][a-zA-Z0-9_]*"]
@@ -101,7 +98,7 @@ pub enum TLTokenEnum {
 
 #[derive(PartialEq, Debug)]
 pub struct TLToken {
-  token_type: TLTokenEnum,
+  pub token_type: TLTokenEnum,
   pub token: String,
 }
 

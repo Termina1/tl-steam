@@ -1,14 +1,16 @@
 use super::ast::*;
 use super::lexer::*;
-use nom::branch::*;
+use nom::branch::alt;
 use nom::bytes::complete::tag;
-use nom::combinator::*;
-use nom::error::*;
-use nom::error::{ErrorKind, VerboseError};
-use nom::sequence::*;
-use nom::*;
+use nom::combinator::{map_res, opt};
+use nom::error::{ErrorKind, ParseError, VerboseError};
+use nom::sequence::{pair, tuple};
+use nom::IResult;
 
+pub mod args;
+pub mod declarations;
 pub mod expressions;
+pub mod program;
 
 type ParserM<'a, T> = Result<T, VerboseError<Tokens<'a>>>;
 type TLParser<'a, T> = IResult<Tokens<'a>, T, VerboseError<Tokens<'a>>>;
@@ -43,47 +45,58 @@ pub fn uc_ident(input: Tokens) -> TLParser<TLUpperName> {
   return Ok((i, result));
 }
 
-fn combinator_name_map(
-  (name, magic_parsed): (TLLowerName, Option<(Tokens, u32)>),
-) -> ParserM<TLCName> {
-  match magic_parsed {
-    Some((_, magic_token)) => Ok(TLCName::FullName(name, magic_token)),
-    None => Ok(TLCName::Name(name)),
-  }
-}
+fn hex_number(input: Tokens) -> TLParser<Nat> {
+  let (i, number) = map_res(
+    tag(TLTokenEnum::HEXNUMBER),
+    |number: Tokens| -> ParserM<Nat> {
+      match u32::from_str_radix(&number.tok[0].token.as_str()[1..], 16) {
+        Ok(num) => Ok(num),
+        Err(_) => Err(VerboseError::from_error_kind(number, ErrorKind::Tag)),
+      }
+    },
+  )(input)?;
 
-fn combinator_name_map_empty<'a>(_: Tokens) -> ParserM<'a, TLCName> {
-  Ok(TLCName::EmptyName)
+  return Ok((i, number));
 }
 
 pub fn combinator_name(input: Tokens) -> TLParser<TLCName> {
   let (i, name) = alt((
-    map_res(tag(TLTokenEnum::UNDERLINE), combinator_name_map_empty),
+    map_res(tag(TLTokenEnum::UNDERLINE), |_| -> ParserM<TLCName> {
+      Ok(TLCName::EmptyName)
+    }),
     map_res(
-      pair(lc_ident, opt(pair(tag(TLTokenEnum::NUM), nat_const))),
-      combinator_name_map,
+      pair(lc_ident, opt(hex_number)),
+      |(name, magic_opt)| -> ParserM<TLCName> {
+        match magic_opt {
+          Some(magic) => Ok(TLCName::FullName(name, magic)),
+          None => Ok(TLCName::Name(name)),
+        }
+      },
     ),
   ))(input)?;
   return Ok((i, name));
-}
-
-pub fn var_name_optional(input: Tokens) -> TLParser<TLVarNameOptional> {
-  let (i, name) = tag(TLTokenEnum::LCIDENT)(input)?;
-  return Ok((i, TLVarNameOptional::Name(name.tok[0].token.clone())));
 }
 
 pub fn var_name(input: Tokens) -> TLParser<TLVarName> {
-  let (i, name) = alt((
-    map_res(
+  let (i, name) = map_res(
+    alt((
       tag(TLTokenEnum::LCIDENT),
-      |t: Tokens| -> ParserM<TLVarName> { Ok(TLVarName::Name(t.tok[0].token.clone())) },
-    ),
-    map_res(
-      tag(TLTokenEnum::UNDERLINE),
-      |_: Tokens| -> ParserM<TLVarName> { Ok(TLVarName::Empty) },
-    ),
-  ))(input)?;
+      tag(TLTokenEnum::UCIDENT),
+      tag(TLTokenEnum::TYPES),
+      tag(TLTokenEnum::FUNCTIONS),
+    )),
+    |t: Tokens| -> ParserM<TLVarName> { Ok(TLVarName::Name(t.tok[0].token.clone())) },
+  )(input)?;
   return Ok((i, name));
+}
+
+pub fn var_name_optional(input: Tokens) -> TLParser<Option<TLVarName>> {
+  let (i, name) = alt((
+    map_res(tag(TLTokenEnum::UNDERLINE), |_| -> ParserM<Option<TLVarName>> { Ok(None) }),
+    map_res(var_name, |name| -> ParserM<Option<TLVarName>> { Ok(Some(name)) })
+  ))(input)?;
+
+  return Ok((i, name))
 }
 
 pub fn type_ident(input: Tokens) -> TLParser<TLTypeIdent> {
@@ -99,8 +112,8 @@ pub fn type_ident(input: Tokens) -> TLParser<TLTypeIdent> {
   return Ok((i, name));
 }
 
-pub fn nat_const(input: Tokens) -> TLParser<u32> {
-  let (i, nat) = map_res(tag(TLTokenEnum::NUMBER), |t: Tokens| -> ParserM<u32> {
+pub fn nat_const(input: Tokens) -> TLParser<Nat> {
+  let (i, nat) = map_res(tag(TLTokenEnum::NUMBER), |t: Tokens| -> ParserM<Nat> {
     let num_str = t.tok[0].token.as_str();
     match u32::from_str_radix(num_str, 10) {
       Ok(num) => Ok(num),

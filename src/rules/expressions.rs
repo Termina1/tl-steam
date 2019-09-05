@@ -2,7 +2,7 @@ use super::*;
 
 use nom::branch::alt;
 use nom::bytes::complete::tag;
-use nom::multi::{many0, separated_nonempty_list, many1};
+use nom::multi::{many0, many1, separated_nonempty_list};
 use nom::sequence::tuple;
 
 pub fn parse_term(input: Tokens) -> TLParser<TLExpression> {
@@ -24,17 +24,25 @@ pub fn parse_term(input: Tokens) -> TLParser<TLExpression> {
 }
 
 fn parse_term_brackets(input: Tokens) -> TLParser<TLExpression> {
-  let(i, (ident, _, exprs, _)) = tuple((
+  let (i, (ident, _, exprs, _)) = tuple((
     type_ident,
     tag(TLTokenEnum::LESSTHAN),
     separated_nonempty_list(
       tag(TLTokenEnum::COMA),
-      map_res(many1(parse_expression), |res| -> ParserM<TLExpression> { Ok(TLExpression::Expression(res)) })
+      map_res(many1(parse_expression), |res| -> ParserM<TLExpression> {
+        Ok(TLExpression::Expression(res))
+      }),
     ),
     tag(TLTokenEnum::GREATERTHAN),
   ))(input)?;
 
-  return Ok((i, TLExpression::Expression(vec![TLExpression::Ident(ident), TLExpression::Expression(exprs)])));
+  return Ok((
+    i,
+    TLExpression::Expression(vec![
+      TLExpression::Ident(ident),
+      TLExpression::Expression(exprs),
+    ]),
+  ));
 }
 
 fn parse_term_full_expression(input: Tokens) -> TLParser<TLExpression> {
@@ -58,7 +66,7 @@ fn parse_expression_hp(input: Tokens) -> TLParser<TLExpression> {
   let (i, (_, nat, expr)) = tuple((
     tag(TLTokenEnum::PLUS),
     nat_const,
-    empty(parse_expression),
+    empty(parse_expression_hp),
   ))(input)?;
 
   let expr = TLExpression::Expression(vec![TLExpression::Nat(nat), expr]);
@@ -70,14 +78,14 @@ pub fn parse_full_expression(input: Tokens) -> TLParser<TLExpression> {
   return Ok((i, TLExpression::Expression(terms)));
 }
 
-pub fn empty<I:Clone, E: ParseError<I>, F>(f: F) -> impl Fn(I) -> IResult<I, TLExpression, E>
+pub fn empty<I: Clone, E: ParseError<I>, F>(f: F) -> impl Fn(I) -> IResult<I, TLExpression, E>
 where
   F: Fn(I) -> IResult<I, TLExpression, E>,
 {
   map_res(opt(f), |res| -> ParserM<TLExpression> {
     match res {
       Some(r) => Ok(r),
-      None => Ok(TLExpression::Empty)
+      None => Ok(TLExpression::Empty),
     }
   })
 }
@@ -85,10 +93,7 @@ where
 pub fn parse_expression(input: Tokens) -> TLParser<TLExpression> {
   let (i, expr) = alt((
     map_res(
-      tuple((
-        parse_term,
-        empty(parse_expression_hp)
-      )),
+      tuple((parse_term, empty(parse_expression_hp))),
       |(term, expr)| -> ParserM<TLExpression> { Ok(TLExpression::Expression(vec![term, expr])) },
     ),
     map_res(
@@ -111,10 +116,7 @@ pub fn parse_expression(input: Tokens) -> TLParser<TLExpression> {
 fn parse_result_type_helper(input: Tokens) -> TLParser<Vec<TLExpression>> {
   let (i, (_, exprs, _)) = tuple((
     tag(TLTokenEnum::LESSTHAN),
-    separated_nonempty_list(
-      tag(TLTokenEnum::COMA),
-      parse_full_expression,
-    ),
+    separated_nonempty_list(tag(TLTokenEnum::COMA), parse_full_expression),
     tag(TLTokenEnum::GREATERTHAN),
   ))(input)?;
 
@@ -122,8 +124,9 @@ fn parse_result_type_helper(input: Tokens) -> TLParser<Vec<TLExpression>> {
 }
 
 pub fn parse_result_type(input: Tokens) -> TLParser<TLExpression> {
-  let (i, (ident, exprs)) = pair(uc_ident,
-    alt((parse_result_type_helper, many0(parse_expression)))
+  let (i, (ident, exprs)) = pair(
+    uc_ident,
+    alt((parse_result_type_helper, many0(parse_expression))),
   )(input)?;
   let name = TLExpression::Ident(TLTypeIdent::Upper(ident));
   let mut exprs_with_ident = vec![name];
@@ -132,13 +135,10 @@ pub fn parse_result_type(input: Tokens) -> TLParser<TLExpression> {
 }
 
 pub fn parse_type_term_with_bang(input: Tokens) -> TLParser<TLExpression> {
-  let (i, (bang, term)) = pair(
-    opt(tag(TLTokenEnum::EXCLMARK)),
-    parse_term
-  )(input)?;
+  let (i, (bang, term)) = pair(opt(tag(TLTokenEnum::EXCLMARK)), parse_term)(input)?;
   let expr = match bang {
     Some(_) => TLExpression::Operator(TLOperator::Bang, Box::from(term)),
-    None => term
+    None => term,
   };
   return Ok((i, expr));
 }
