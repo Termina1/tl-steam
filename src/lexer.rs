@@ -89,10 +89,10 @@ pub enum TLTokenEnum {
   #[regex = "[0-9a-fA-F]+"]
   HEXNUMBER,
 
-  #[regex = "[a-z][a-zA-Z0-9_]+"]
+  #[regex = "[a-z][a-zA-Z0-9_]*"]
   LCIDENT,
 
-  #[regex = "[A-Z][a-zA-Z0-9_]+"]
+  #[regex = "[A-Z][a-zA-Z0-9_]*"]
   UCIDENT,
 
   #[error]

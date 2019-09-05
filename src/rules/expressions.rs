@@ -107,3 +107,38 @@ pub fn parse_expression(input: Tokens) -> TLParser<TLExpression> {
 
   return Ok((i, expr));
 }
+
+fn parse_result_type_helper(input: Tokens) -> TLParser<Vec<TLExpression>> {
+  let (i, (_, exprs, _)) = tuple((
+    tag(TLTokenEnum::LESSTHAN),
+    separated_nonempty_list(
+      tag(TLTokenEnum::COMA),
+      parse_full_expression,
+    ),
+    tag(TLTokenEnum::GREATERTHAN),
+  ))(input)?;
+
+  return Ok((i, exprs));
+}
+
+pub fn parse_result_type(input: Tokens) -> TLParser<TLExpression> {
+  let (i, (ident, exprs)) = pair(uc_ident,
+    alt((parse_result_type_helper, many0(parse_expression)))
+  )(input)?;
+  let name = TLExpression::Ident(TLTypeIdent::Upper(ident));
+  let mut exprs_with_ident = vec![name];
+  exprs_with_ident.extend(exprs);
+  return Ok((i, TLExpression::Expression(exprs_with_ident)));
+}
+
+pub fn parse_type_term_with_bang(input: Tokens) -> TLParser<TLExpression> {
+  let (i, (bang, term)) = pair(
+    opt(tag(TLTokenEnum::EXCLMARK)),
+    parse_term
+  )(input)?;
+  let expr = match bang {
+    Some(_) => TLExpression::Operator(TLOperator::Bang, Box::from(term)),
+    None => term
+  };
+  return Ok((i, expr));
+}
